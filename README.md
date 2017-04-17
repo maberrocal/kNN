@@ -9,10 +9,9 @@ programación R bajo el software RStudio.
 El primer ejemplo (kNN_Clasificaciom_Regresion) hace uso del método de k vecinos más cercanos al dataset adjunto "datawork.csv". 
 Se soluciona un problema de regresión y otro de clasificación sobre dos variables objetivo diferentes.
 
-      **Regresión**: Determinación de un predictor basado en kNN ponderado para la variable objetivo “varobj” con los atributos
-                   x01…x40.
-      **Clasificación**: Determinación de un clasificador basado en kNN ponderado para la variable objetivo “clasobj” con los
-                  atributos x01…x40. 
+**Regresión**: Determinación de un predictor basado en kNN ponderado para la variable objetivo “varobj” con los atributos x01…x40. 
+
+**Clasificación**: Determinación de un clasificador basado en kNN ponderado para la variable objetivo “clasobj” con los atributos x01…x40. 
 
 ## Estadística descriptiva:
 
