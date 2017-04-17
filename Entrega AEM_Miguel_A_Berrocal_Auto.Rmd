@@ -1,0 +1,190 @@
+---
+title: "AEMOD. Entrega Auto"
+author: "Miguel Ángel Berrocal"
+date: "7/2/2017"
+output: pdf_document
+---
+
+## Introducción.
+
+En este ejercicio se hace uso del conjunto de datos "Auto", disponible en el paquete de R (ISLR)
+
+En esta práctica se determinará un modelo que indentifique qúe varibles influyen en mayor y menor medida en el dato de consumo de combustible para una serie de vehículos, medido en millas por galón (mpg).
+
+```{r}
+library(ISLR)
+library(MASS)
+library(ggplot2)
+attach(Auto)
+head(Auto)
+```
+
+## Tratamiento de los datos y extracción de información:
+
+En el enunciado se propone eliminar del conjunto de datos aquellos vehículos con un gasto menor a 13 mpg. Además, se indica que hay considerar la variable salida mpg como variable de conteo, por lo que resulta de interés establecer el mínimo de consumo a 0 para que el recorrido de dicha variable empiece en 0. Al establecer el gasto en combustible como variable de conteo hay que redondear los datos.
+
+A continuación, se aplican las recomendaciones indicadas.
+
+```{r cars}
+# Se seleccionan aquellos vehículos con mpg>=13
+Auto_h<-Auto[I(mpg>=13),]
+# Se establece el mínimo valor de gasto en 0
+m_13=round(Auto_h$mpg-13)
+# Se incluye la nueva variable en el conjunto de datos
+datos_auto <- cbind(m_13,Auto_h)
+# Se transforma la variable origin a tipo categórica
+datos_auto$origin <- factor(datos_auto$origin)
+datos_auto$year <- ordered(datos_auto$year)
+datos_auto$cylinders <- ordered(datos_auto$cylinders)
+head(datos_auto)
+str(datos_auto)
+# Histograma del consumo en mpg
+
+p <- ggplot(datos_auto, aes(x=mpg)) + 
+  geom_histogram(position = "identity", col= "red", fill="white", alpha = 0.5, bins= 8)
+p + ggtitle("Histograma de autonomía en mpg.")
+
+```
+
+
+Con la instrucción **str**, se obtiene información sobre el conjunto de datos y el tipo de variables con las que se va a trabajar. Se ha cambiado el tipo de variable para "origin", que ha pasado de numérica a categórica, ya que representa el lugar de procedencia del vehículo. Por otro lado, se propone el cambio de las variables **year y cylinder** a tipo ordinal.
+
+Una buena técnica para tener una impresión general sobre la relación de los diferentes atributos con la salida es usar la función **pairs**. Este comando genera un scatter plot que permite una rápida inspección de las relaciones comentadas.
+
+```{r}
+pairs(~m_13 +  displacement + horsepower + weight + acceleration + origin + year + 
+        cylinders, data=datos_auto)
+```
+
+Inspecionando el gráfico se observan ciertas relaciones. La autonomía decrece con el incremento de las variables **number of cylinders, displacement, weight, horsepower** , y aumenta con el incremento de las variables **acceleration y year**.
+
+A continuación, se presenta un gráfico en el que se puede ver con claridad las relaciones de diferentes variables con el consumo de combustible.
+
+```{r}
+qplot(horsepower, mpg, data = datos_auto, colour = cylinders, size= weight, alpha = I(0.65),
+      main = "Autonomía del vehículo frente a diferentes variables representativas")
+```
+
+Este gráfico resulta de gran interés debido a su simplicidad y alto contenido ilustrativo. En él se comprueba a simple vista la dependencia de las variables **cylinders, weight y horsepower** frente a la autonomía del vehículo. Dicha autonomía, en términos generales, disminuye con el aumento de número de cilindros, peso y caballos de potencia. 
+
+El número de cilindros es representado con una serie de colores. Para el caso del peso, se tiene que el diámetro del punto depende linealmente de los kilogramos. 
+
+Resulta inmediato sacar una serie de conclusiónes, por ejemplo, que, por regla general, aquellos coches que presentan una menor autonomía tienen 8 cilindros, más de 125 caballos de potencia y un peso mayor. Una correcta representación gráfica es una forma rápida y sencilla de verificar las conclusiones extraidas de apartados anteriores.
+
+
+```{r}
+qplot(year, mpg, data = datos_auto, colour = cylinders, size= weight, shape=origin, 
+      alpha = I(0.50),main = "Autonomía frente a diferentes variables representativas")
+```
+
+Si se reestructura la forma de presentar los gráficos y, además, se añade un factor de forma relacionado con el lugar de origen del vehículo, y se sustituye la variable **horsepower** por **year**, se obtiene el gráfico anterior. De él se pueden extraer numerosas conclusiones, siendo una de ellas que los vehículos que presentan menor autonomía media son aquellos con mayor peso y número de cilindros. En cuanto al origen y año de fabricación, consumen más aquellos construidos entre los años 70 y 76 y cuyo origen corresponde a la categoría 1.
+
+
+## Creación de modelos.
+
+Una vez estudiadas las principales variables y sus dependencias, se procede a la creación y comparación de los diferentes modelos estadísticos.
+
+En este apartado, se van a crear diferentes modelos generalizados y se estudiará la importancia de las variables en cada caso. También se crearán modelos con interacción entre variables y se estudiará su validez.
+
+Para ello, se va a tratar con la variable propuesta por el enunciado **m_13** y se eliminará del conjunto de datos las variables **mpg y name**.
+
+```{r}
+nuevos_datos <- datos_auto[-c(2,10)]
+names(nuevos_datos)
+```
+
+### Consideraciones iniciales.
+
+Tal y como se ha explicado en clase, los modelos adecuados para trabajar con una variable respuesta de tipo conteo son: el modelo de poisson y el modelo de binomial negativa. Si se tuviera un exceso de ceros, habría que recurrir a modelos ZAP o ZANB según el caso.
+
+En este conjunto de datos no hay exceso de ceros, por los que los modelos ZAP y ZANB no serían los candidatos a ser aplicados. Para comprobar cuál es más adecuado usar de entre los dos restantes, se debe calcular la media y la varianza de la variable respuesta.
+
+```{r}
+mean(nuevos_datos$m_13)
+var(nuevos_datos$m_13)
+```
+
+El modelo de Poisson se caracteriza por tener su media igual a su varianza. Sin embargo, en muchos conjuntos de datos de conteo, la varianza es superior a la media. Este fenómeno se conoce como sobredispersión, y en estos casos es preferible usar la distribución binomial negativa.
+
+En base a lo indicado, se observa que la varianza y la media de la variable respuesta no son iguales. Por tanto, la distribución más adecuada desde un punto de vista formal es la binomial negativa. 
+
+### Modelos lineales generalizados sin interacción entre variables.
+
+Los difrenetes modelos serán generados con la función **glm.nb** ya que la librería glm de stats no incluye la familia binomial negativa. El criterio de comparación de modelos será a través de AIC, considerando "mejor" modelo aquel con menor AIC. Posteriormente, se realizará una comparación conjunta de los mejores modelos generados a través de la función anova. El criterio AIC, o Criterio de Información de Akaike, ofrece una medida de la calidad relativa de un modelo estadístico, dado un conjunto de datos.
+
+El primer modelo se genera con todas la variables predictoras.
+
+```{r}
+m0 <- glm.nb( m_13~., data = nuevos_datos)
+summary(m0)
+```
+
+En primera instancia, se observa que las variables menos significativas son **acceleration, displacement y origin**, siendo las más significativas, **weight, year, horsepower y cylinders**. Se ha llegado a esta afirmación mediante el estudio de los p-valores de las diferentes variables. Para aquellas con un p-valor < 0.05, se rechaza la hipótesis nula, que indica que no son signifiativas al nivel de 95% de confianza. Para aquellas mayores de 0.05, sus altos p-valores no significan que no deben estar en el modelo, sino que hay otras variables que están correlacionadas con ellas y las hacen menos útiles para elaborar una predicción.
+
+Mediante la función update, se va a iterar eliminando una de las variables menos significativas en cada paso. Por motivos de extensión, sólo se ha especificado la elmininación de aquella variable que aporta mayor mejora sobre el modelo de referencia con todas las variables predictoras.
+
+```{r}
+m0_origin <- update(m0,.~.- origin)
+summary(m0_origin)
+```
+
+Partiendo del modelo anterior, m0_origin, en el que se eliminó la variable **origin**, se aplica el mismo procedimiento eliminando una variable más, aquella que presente un menor nivel de significación. La variable predictora que menos explica a la variable respuesta es, en este caso, **acceleration**.
+
+```{r}
+m0_origin_acceleration <- update(m0_origin,.~.- acceleration)
+summary(m0_origin_acceleration)
+```
+
+En este punto, se observa que todas las variables explicativas que quedan en el modelo son significativas, y que el AIC ha ido disminuyendo con cada una de las eliminaciones de varaibles propuestas. El siguiente paso es la inclusión de interacciones entre variables.
+
+Previamente a la creación de estos términos, se va a proceder a comparar los modelos generados, para así verificar que las hipótesis establecidas son correctas. Para ello, se aplica el test chi cuadrado sobre los tres modelos generados.
+
+```{r}
+anova(m0, m0_origin, m0_origin_acceleration,  test="Chisq")
+```
+
+A la vista de los resultados, se observa que el tanto el modelo m0, como m0_origin, no presentan una mejora significativa sobre m0_origin_acceleration, dado que no se puede rechazar la hipótesis nula y. Por tanto, se ha optado por elegir el modelo con menos variables explicativas.
+
+
+### Modelos lineales generalizados con interacción entre variables.
+
+Partiendo del mejor modelo calculado anteriormente, **m0_origin_acceleration**, se va a proceder a generar nuevos modelos a partir de la interacción de las variables que lo conforman.
+
+```{r}
+m0_interaccion <- glm.nb( m_13 ~ weight * horsepower + year + displacement + cylinders,
+                          data=nuevos_datos)
+summary(m0_interaccion)
+```
+
+Al incluir el término de multiplicación de las variables **weight * horsepower**, se produce una mejora del modelo, reduciéndose el valor de AIC: 1759.3
+
+Por último, se van a introducir términos potencia de algunas de las variables explicativas. 
+
+```{r}
+m0_poly <- glm.nb( m_13~ poly(weight,2) + year + horsepower + cylinders + displacement,
+                   data=nuevos_datos)
+summary(m0_poly)
+```
+
+Por simplicidad, se ha mostrado el modelo cuya combinación de términos de potencia, generan un menor valor de AIC, y por tanto, un mejor resultado atendiendo al criterio de evaluación propuesto.
+
+```{r}
+modelos = c ("Completo", "Eliminando origin", "Emininando origin y acceleration", 
+           "Con interacción", "Polinómico")
+
+res = c(m0$deviance, m0_origin$deviance, m0_origin_acceleration$deviance, 
+        m0_interaccion$deviance, m0_poly$deviance)
+
+aic = c(m0$aic, m0_origin$aic, m0_origin_acceleration$aic, m0_interaccion$aic, m0_poly$aic)
+tabla = cbind("Modelos"=modelos, "Devianza de residuos"= res, "AIC"=aic)
+
+knitr::kable(as.data.frame( tabla), format = "latex",align='l', 
+             caption = "Tabla de resultados")
+```
+
+Como conclusión, y siguiendo el criterio comentado, se tomará el modelo denominado como **Polinómico** como candidato, al ser el que mejor explica la variable respuesta y tiene un valor de AIC más bajo.
+
+```{r echo=FALSE}
+detach(Auto)
+```
+

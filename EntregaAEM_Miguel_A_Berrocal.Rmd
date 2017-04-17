@@ -1,0 +1,394 @@
+---
+title: "Entrega AEM: Regresión y clasificación mediante kNN"
+author: "Miguel Ángel Berrocal"
+date: "29/1/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(rknn)
+library(kknn)
+```
+
+
+## Problema de clasificación.
+
+###Determinación de un clasificador basado en kNN ponderado para la variable objetivo “clasobj” con los atributos x01...x40.
+
+En primer lugar, se carga el conjunto de datos y se hace una breve visualización de las variables que intervienen, así como su dimensión. Además, resulta de utilidad la obtención de un resumen básico que del conjunto de datos para hacerse una idea de la distibución, tipo y recorrido de las diferentes variables.
+```{r}
+datos <- read.table("datawork.csv", header=TRUE, sep=";")
+dim(datos)
+names(datos)
+summary(datos)
+```
+En efecto, se tiene un conjunto de datos con 40 variables explicativas y 2 variables respuesta diferentes, que se usarán para predecir o clasificar según el caso. Todas las variables explicativas son de tipo numérico, no existiendo en este caso variables de tipo categórico u ordinal.
+
+A continuación, se ha de seleccionar aleatoriamente un conjunto test de tamaño n/3 y un conjunto de aprendizaje de tamaño 2n/3. Para ello se seleccionan todas las variables predictoras, comprendidas en el intervalo x0...x40.
+
+```{r}
+set.seed(2017)
+m <- dim(datos)[1]
+# Generación de los índices de las muestras.
+sample <- sample(1:m, size = round(m/3), replace = FALSE,prob = rep(1/m, m)) 
+# Se elimina la variable varobj del conjunto de datos.
+datos1 =datos[,-c(2)]
+names(datos1)
+# Creación de los datos de entrenamiento.
+datos1.train <- datos1[-sample,]
+dim(datos1.train)
+# Creación de los datos de test.
+datos1.test <- datos1[sample,]
+dim(datos1.test)
+```
+Se verifica que los conjuntos de test y entrenamiento se han generado satisfactoriamente. Se ha eliminado también la variable respuesta "varobj", ya que en este problema se atenderá excusivamente a la clasificación de la variable respuesta "clasobj".
+
+###Con el conjunto de aprendizaje, selecciona el mejor núcleo y el mejor k (entre 1 y 20) a través de validación cruzada.
+
+```{r}
+
+(fit.train <- train.kknn(clasobj ~ ., datos1.train, kmax = 20,
+                          kernel = c("rectangular", "triangular", "epanechnikov",
+                                     "gaussian","biweight","triweight","cos","inv", 
+                                     "rank", "optimal"), distance = 1))
+```
+Se aplica el método de entrenamiento de **validación cruzada** sobre el conjunto de datos train con los diferentes kernels y valores de k, y se obtiene que la **mejor combinación** (kernel, k) es (kernel = rectangular, k = 4). En este caso, el método de validación cruzada utilizado es **leave one out**. El error de clasificación obtenido con estos valores es de 0.01499813
+
+A continuación, se realizan las predicciones sobre conjunto de test, se comparan con los valores reales y se obtiene la matriz de confusión.
+
+```{r}
+table(predict(fit.train, datos1.test), datos1.test$clasobj)
+```
+
+Como se puede observar, los resultados obtenidos con el clasificador parecen razonablemente buenos. Tan solo ha errado al clasificar 25 casos de los 1333 contemplados en el conjunto de datos destinados al test.
+
+En las siguentes líneas se exponen una serie de resultados, asociados a difrentes medidas de error durante el proceso de selección de kernel y número de vecinos.
+
+
+```{r}
+# Matriz de errores de clasificación (para los distintos núcleos y valores de k). Solo se
+# muestran los 4 primeros valores de k por cuestión de espacio
+fit.train$MISCLASS[1:4,]
+# Listado de predicciones para la primera combinación de función núcleo y valores de k. 
+# Omitido por una extensión excesiva.
+# fit.train$fitted.values[1]
+# Mejores parámetros para función núcleo y valor k 
+fit.train$best.parameters 
+# Tipo de variable respuesta (continua, ordinal, norminal)
+fit.train$response
+# Parámetro de la distancia de Minkowski
+fit.train$distance       
+plot(fit.train, main="Error de clasificación en función del kernel y k")
+
+```
+
+
+Con el apoyo del gráfico, se reconoce facilmente que aquellos kernels que dan mejores resultados son: "rectangular","inv" y "rank". En cuanto al los valores de k, se aprecia claramente que a partir de k=4, el error del clasificador se mantiene constante y cercano al 1,2%. Este es un buen modelo también desde el punto de vista computacional, ya que se consiguen buenos resultados con un reducido número de vecinos y con una función kernel rectangular, que lo hace ser no ponderado.
+
+Podemos proceder a realizar el mismo procedimiento de este apartado con una normalización a la unidad de todo el conjunto de datos y comprobar si éste afecta al resultado. En esta ocasión solo será comentado el resultado final.
+
+```{r}
+datos2 =datos[,-c(2)]
+# Normalización del conjunto de datos a la unidad.
+datos2 = data.frame(normalize.unit(datos2[,c(-1)]),Y=datos2$clasobj)
+# Verificación de la normalización.
+head(datos2)
+# Creación de los datos de entrenamiento con las mismas muestras del apartado anterior.
+datos2.train <- datos2[-sample,]
+# Creación de los datos de test
+datos2.test <- datos2[sample,]
+
+(fit.train <- train.kknn(Y ~ ., datos2.train, kmax = 20,
+                          kernel = c("rectangular", "triangular", "epanechnikov",
+                                     "gaussian","biweight","triweight","cos","inv",
+                                     "rank", "optimal"), distance = 1))
+
+```
+Como se puede comprobar, los mejores parámetros tanto de kernel como el valor de k no han variado. Además el error de clasificación es el mismo, con lo que el proceso de normalización de los datos no aporta una ventaja respecto al anterior en este caso.
+
+## Problema de regresión.
+
+###Determinación de un predictor basado en kNN ponderado para la variable objetivo “varobj” con los atributos x01...x40.
+
+Tal y como se procedió en el apartado anterior, se ha de seleccionar aleatoriamente un conjunto test de tamaño n/3 y un conjunto de aprendizaje de tamaño 2n/3. En este caso, la variable respuesta pasa a ser "varobj"
+
+```{r}
+set.seed(2017)
+m <- dim(datos)[1]
+# Selección de los datos.
+datos3 =datos[,-c(1)]
+# Normalización de los datos.
+datos3 = data.frame(normalize.unit(datos3[,c(-1)]),Y=datos3$varobj)
+names(datos3)
+# Generación de los índices de las muestras.
+sample <- sample(1:m, size = round(m/3), replace = FALSE,prob = rep(1/m, m)) 
+# Creación de los datos de entrenamiento
+datos3.train <- datos3[-sample,]
+dim(datos3.train)
+# Creación de los datos de test
+datos3.test <- datos3[sample,]
+dim(datos3.test)
+```
+###Aplicar el predictor óptimo obtenido para predecir los casos del conjunto test y obtener una medida del error de predicción.
+
+Una vez se han seleccionado y separado los datos en un conjunto de entrenamiento y test, se procede a la creación del modelo knn ponderado.
+
+```{r}
+(fit.train2 <- train.kknn(Y ~ ., datos3.train, kmax = 20, scale="FALSE",
+                          kernel = c( "rectangular","triangular", "epanechnikov", 
+                                      "gaussian","biweight","triweight", "optimal","rank",
+                                      "cos","inv"), distance = 2))
+
+plot(fit.train2, main="Error de cuadrático medio en función del kernel y k")
+```
+
+En este caso, el kernel que mejor se adapta es el de tipo "optimal" con k = 2. A la vista del gráfico se verifica este resultado. El error cuadrático medio resultante es  167.6904 
+
+Se verifican los cálculos, valores y estimaciones generados en proceso anterior mediante las siguientes instrucciones.
+
+```{r}
+names(fit.train2)
+
+fit.train2$best.parameters # Mejores parámetros para función núcleo y valor k 
+fit.train2$response        # Tipo de variable respuesta (continua, ordinal, norminal)
+fit.train2$distance        # Parámetro de la distancia de Minkowski.
+
+# Error de ajuste en el regresor óptimo.
+fit.train2$MEAN.SQU[fit.train2$best.parameters$k,fit.train2$best.parameters$kernel]
+```
+
+###Determinación de un predictor basado en kNN aleatorio para la variable objetivo “varobj” con los atributos x01...x40.
+
+En este apartado se procede al cálculo de un predictor basado en kNN aleatorio para estimar los valores de la variable objetivo "varobj". Posteriormente se le aplicarán al modelo resultante las técnicas de selección de atributos vistas en clase.
+
+```{r}
+(p=ncol(datos)-1)
+m=10
+(rnc=r(p,m,eta=0.99,method="binomial"))
+```
+
+Se tienen 40 variables predictoras y 1 variable respuesta. Se ha tomado m=10 como número de variables predictoras a incuir en el modelo. Para una probabilidad de presencia de las variables en el modelo de un 99%, se tiene un r=30. Es decir, se generan 30 modelos de 10 variables seleccionadas aleatoriamente de forma iterativa y la respuesta se estima en base a esta combinación.
+
+```{r}
+#Aplicación de rkNN para k=4 y r=40 (superior al mínimo necesario para eta=0.99)
+datosrknn = rknnReg(data=datos3.train[,c(-41)],datos3.test[,c(-41)], y=datos3.train$Y, 
+                    k = 4, r=40, mtry = m , seed=2017)
+```
+
+En este paso se ha creado el modelo kNN aleatorio a partir de 40 modelos con 10 variables cada uno. Se ha omitido la salida del modelo por cuestiones de extensión de la memoria, pero en las siguientes instrucciones se presentan los parámetros mas interesantes.
+
+```{r}
+datosrknn$k    # Número de vecinos utilizados en los clasificadores
+datosrknn$r    # Número de clasificadores
+datosrknn$mtry # Número de atributos en cada clasificador
+datosrknn$p    # Número de atributos
+
+# Error cuadrático medio para knn aleatorio
+(MSE_knn_random = sum((datosrknn$pred-datos3.test$Y)^2/dim(datos3.test)[1]))
+
+plot(datos3.test$Y,datosrknn$pred,xlim=c(0,100),ylim=c(0,50), main = "Valores de 
+    predicción frente a valores reales")
+abline(a=0,b=1)
+
+```
+
+En el gráfico se representan los valores de la variable respuesta predichos por el modelo en comparación con los valores reales del conjunto de test. Se puede observar que, en media, la mayoría de las predicciones toman un valor cercano a su valor real, sin embargo, se da la existencia de ciertos casos en los que el regresor no se ajusta con precisión.
+
+A continuación se procede a la aplicación del un método de selección de variables. Este, permite simplificar el modelo y eliminar de él variables que puedan añadir algún tipo de ruido.
+
+En el paso anterior se han normalizado los datos, se ha obtenido el valor de "r" para un "m" dado y se ha generado el modelo rkNN. Para determinar la relevancia de los atributos, se aplica la medida de soporte sobre las difentes variables. Esta medida servirá como criterio para la posterior selección en función de su importancia.
+
+```{r}
+datosrknn.sup = rknnRegSupport(data = datos3.train[,c(-41)], y=datos3.train$Y, 
+                               k = 4, r=40, mtry = m , seed=2017)
+
+print(datosrknn.sup)
+
+datosrknn.sup$accuracy  # Medida de la acuracidad del método
+datosrknn.sup$meanacc   # Acuracidad media de los r clasificadores generados
+datosrknn.sup$support   # Vector (dimensión p) de las medidas "soporte" de los atributos
+
+mean(datosrknn.sup$support)
+summary(datosrknn.sup$support)
+
+# Gráficos de las medidas soporte de los atributos
+plot(datosrknn.sup$support, main="Medida de soporte de los atributos")
+
+# Plot de los 10 atributos más importates según la medida soporte
+plot(datosrknn.sup, n.var= 10, main = "Valor del soporte por atributo",
+     bg = "green", lcolor="blue") 
+
+```
+
+Las medidas de precisión o acuracidad se realizan a través del método de crosvalidación **leave one out** sobre el conjunto de aprendizaje.
+
+A la vista del gráfico, se observan las variables con mayor soporte, que serán candidatas a ser las seleccionadas en el los siguientes pasos.
+
+El primero de ellos es la eliminación geométrica. En ella, se eliminan un 20% de los atributos en cada paso, quedándose con el 80% restante. Se ha establecido el criterio de parada en 6 variables. El resto de los parámetros se han mantenido iguales a los de apartados anteriores. En este caso se utiliza todo el conjunto de datos, no sólo los de entrenamiento.
+
+```{r}
+# Selección geométrica
+datosrknn.selG = rknnBeg(data=datos3[,c(-41)], y=datos3$Y, k = 4, r=40, mtry = m, 
+                         seed=2017,fixed.partition = FALSE, pk = 0.8 , stopat=6)
+
+```
+
+Se ha escogido como criterio de parada 6 variables, porque de haber escogido un valor menor, la última fase de la eliminación geométrica pasaría a eliminar las variables de una en una, y precisamente esa eliminación "fina" es lo que se pretende con la selección lineal que se aplicará posteriormente. 
+```{r}
+datosrknn.selG$p          # Vector de número de variables seleccionadas en cada paso
+datosrknn.selG$vars[5]    # Lista de variables o atributos en el paso 5, con su soporte
+# Lista del valor medio de la medida soporte en cada uno de los pasos
+datosrknn.selG$mean_support  
+# Lista del valor medio de la acuracidad en cada uno de los pasos
+datosrknn.selG$mean_accuracy 
+
+par(mfrow=(c(3,1)))
+plot(datosrknn.selG$mean_accuracy,type="l", xlab="Paso", ylab="Acuracidad media",
+     main="Medida de acuracidad en cada paso. Etapa Geométrica")
+plot(datosrknn.selG$mean_support,type="l", xlab="Paso", ylab="Soporte medio",
+     main="Soporte medio en cada paso. Etapa Geométrica")
+plot(datosrknn.selG$mean_support,datosrknn.selG$mean_accuracy,
+     main= "Soporte medio frente a acuracidad media. Etapa geométrica")
+
+```
+
+De los resultados de las instruciones anteriores se pueden observar:
+
+· El número de variables que se seleccionan en cada iteración.
+
+· La lista de atributos seleccionados en un paso cualquiera junto a su valor de soporte.
+
+· El valor medio del soporte de las diferentes variables en cada iteración.
+
+· El valor medio de la acuracidad en cada paso.
+  
+En cuanto a los gráficos, los dos primeros representan la acuracidad y el soporte medio de las varibles en cada paso respectivamente. En el tercero se muestra la relación entre el soporte medio y la acuracidad media. 
+
+El paso con mejor resultado es el 9. Para esta configuración tenemos 7 atributos, y sus valores son los siguientes:
+```{r}
+bestset(datosrknn.selG, criterion="mean_accuracy")
+# Número de atributos seleccionados en el paso en el que se obtiene el óptimo 
+datosrknn.selG$p[9]    
+# Lista de variables o atributos en el paso 9, con su soporte
+datosrknn.selG$vars[9] 
+
+```
+Ahora, se realiza otra comprobación tomando como criterio de selección el soporte medio en lugar de la acuracidad media. Puede comprobarse que los resultados de la selección son iguales.
+
+A continuación, se seleccionan los atributos del paso inmediatamente anterior al mejor de la primera selección para tomarlo como parámetro de partida en la selección lineal.
+```{r}
+# Coincide con el criterio "mean_accuracy"
+bestset(datosrknn.selG, criterion="mean_support") 
+# Selección del paso inmediatamente anterior al "mejor"
+prebestset(datosrknn.selG, criterion="mean_support")  
+# Número de atributos seleccionados en el paso en el que se obtiene el óptimo
+datosrknn.selG$p[9]
+# Lista de variables o atributos en el paso 9, con su soporte
+datosrknn.selG$vars[9] 
+
+```
+
+Ahora le llega el turno a la selección lineal. Partiendo de las variables resultantes de la selección geométrica y correspondientes al paso anterior al mejor encontrado, se aplica la selección lineal con reducción de una variable en cada paso.
+```{r}
+# Variables resultantes de la selección geométrica.
+mejorselgeo <- prebestset(datosrknn.selG, criterion="mean_support")
+mejorselgeo 
+# Selección lineal con todos los datos del conjunto y con parada en dos variables
+datosrknn.selLIN = rknnBel(data=datos3[,c(mejorselgeo)], y=datos3$Y, k = 4, r=40, 
+                          mtry = m , seed=2017, fixed.partition = FALSE, d=1, 
+                          stopat=2)
+
+# Vector de número de variables seleccionadas en cada paso
+datosrknn.selLIN$p 
+# Lista de variables o atributos en el paso 5, con su soporte
+datosrknn.selLIN$vars[6]       
+# Lista del valor medio de la medida soporte en cada uno de los pasos
+datosrknn.selLIN$mean_support 
+# Lista del valor medio de la acuracidad en cada uno de los pasos
+datosrknn.selLIN$mean_accuracy 
+
+par(mfrow=(c(3,1)))
+plot(datosrknn.selLIN$mean_accuracy,type="l", xlab="Paso", ylab="Acuracidad media",
+     main="Medida de acuracidad en cada paso. Etapa Lineal")
+plot(datosrknn.selLIN$mean_support,type="l", xlab="Paso", ylab="Soporte medio",
+     main="Soporte medio en cada paso. Etapa Lineal")
+plot(datosrknn.selLIN$mean_support,datosrknn.selLIN$mean_accuracy, 
+     main = "Soporte medio frente a acuracidad media. Etapa lineal")
+
+bestset(datosrknn.selLIN, criterion="mean_support")
+bestset(datosrknn.selLIN, criterion="mean_accuracy")
+```
+
+A la vista de los resultados anteriores, se observa que los mejores valores, tanto de acuracidad media como de soporte medio, se dan en el paso 6, y que las variables seleccionadas en ambos casos son las mismas. Se tienen 4 variables predictoras (X11, X25, X08 y X37) ordenadas por su soporte.
+
+Lo siguiente, es proceder a recalcular el modelo random kNN con el conjunto de entrenamiento, sin embargo, en este caso solo se incluirán las variables seleccionadas en el proceso anterior. Se tomará "m" como el número de variables seleccionadas dividido entre 2 y r como rnc+1.
+
+```{r}
+# Random knn con las mejores variables resultantes del proceso de selección
+mejorsel <- bestset(datosrknn.selLIN, criterion="mean_support")
+
+numsel=datosrknn.selLIN$p[6]
+sel_mtry=round(0.5*numsel,0)
+rnc=r(numsel,sel_mtry,eta=0.99,method="binomial")
+
+datosrknnsel = rknnReg(data=datos3.train[,mejorsel], datos3.test[,mejorsel], 
+                       y=datos3.train$Y, k = 4, r=rnc+1, mtry = sel_mtry , seed=2017 )
+
+# Error cuadrático medio para knn con selección de variables
+(MSE_knn_sel = sum((datosrknnsel$pred-datos3.test$Y)^2/dim(datos3.test)[1]))
+
+datosrknnsel$k    # Número de vecinos utilizados en los clasificadores
+datosrknnsel$r    # Número de clasificadores
+datosrknnsel$mtry # Número de atributos en cada clasificador
+datosrknnsel$p    # Número de atributos
+```
+Una vez completado el modelo con la selección de atributos, se va a proceder a la comparación con el modelo ponderado que se realizó al inicio del ejercicio.
+
+```{r}
+# Comparación con el knn ponderado con k=2 y kernel óptimo y todas las variables
+
+ponderado.kknn <- kknn(datos3.train$Y~. , datos3.train, datos3.test, distance = 2,
+                   k=2, kernel = "optimal")
+
+summary(ponderado.kknn)
+
+# Valores ajustados del modelo kNN ponderado con todas las variables.
+fit.ponderado.kknn <- fitted(ponderado.kknn) 
+# Valores ajustados del modelo kNN aleatorio con selección de variables.
+datos3.fit = fitted(datosrknnsel)
+
+# Error cuadrático medio para knn ponderado
+(MSE_knn_pond = sum((fit.ponderado.kknn-datos3.test$Y)^2/dim(datos3.test)[1]))
+
+
+par(mfrow=c(1,2))
+plot(datos3.test$Y,datos3.fit,xlim=c(0,70),ylim=c(0,50),col=4,main="Random kNN: k=4, p=4")
+abline(a=0,b=1,col=2)
+plot(datos3.test$Y,fit.ponderado.kknn,xlim=c(0,70),ylim=c(0,50),col=2,main="Weighted kNN: 
+     k=2, p=40")
+abline(a=0,b=1,col=4)
+par(mfrow=c(1,1))
+
+
+
+```
+Como puede comprobarse, la selección de variables con el modelo Random kNN no empeora los resultados, aún usando 10 veces menos variables que el kNN ponderado (4 variables en el Random frente a 40 en el ponderado). Por consiguiente, se estaría generando un modelo mucho más simple y con unos valores de acuracidad cercanos al modelo con todas las variables. Sería tarea del investigador la inclusión de ciertas características que resulten de interés a su cliente si este lo considerase oportuno, aunque a efectos prácticos carezca de sentido.
+
+Por último, se comprueban el error cuadrático medio de los difrentes modelos:
+
+```{r}
+MSE_table = rbind("kNN poderado"= MSE_knn_pond, "kNN aleatorio sin selección"= 
+                  MSE_knn_random, "kNN aleatorio con selección de variables" = 
+                  MSE_knn_sel)
+colnames(MSE_table) = "MSE"
+MSE_table
+
+```
+
+Los resultados de la tabla justifican el uso del método kNN aleatorio, ya que presenta una reducción del MSE respecto a los modelos anteriores y utiliza 4 variables frente a 40.
+
+
+
+
+
+
