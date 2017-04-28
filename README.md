@@ -1,7 +1,7 @@
 # Machine learning with R
 
 En este repositorio se incluyen varios ejemplos ilustrativos de diferentes técnicas de machine learning, utilizando el lenguaje de 
-programación R bajo el software RStudio.
+programación R bajo el software RStudio. Para una visualización mas cómoda en el navegador, recomiendo abrir los archivos con extensión .md
 
 
 ## kNN: 
